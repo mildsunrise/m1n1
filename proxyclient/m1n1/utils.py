@@ -317,6 +317,20 @@ class RegisterMeta(ReloadableMeta):
 
         m._fields_list = list(f.keys())
         m._fields = set(f.keys())
+        globalmask = 0
+        for k in m._fields:
+            v = getattr(m, k)
+            if isinstance(v, int):
+                v = v, v
+            msb, lsb, *_ = v
+            assert all(isinstance(x, int) and x >= 0 for x in v[:2])
+            assert msb >= lsb, f'invalid field {k}'
+            if hasattr(m, '__WIDTH__'):
+                assert msb < m.__WIDTH__, f'out of bounds field {k}'
+            mask = ((1 << ((msb + 1) - lsb)) - 1) << lsb
+            assert globalmask & mask == 0, f'overlapping field {k}'
+            globalmask |= mask
+        m._othermask = ~globalmask
 
         return m
 
@@ -338,6 +352,8 @@ class Register(Reloadable, metaclass=RegisterMeta):
             setattr(self, k, v)
 
     def __getattribute__(self, attr):
+        if attr == '_other':
+            return self._value & self._othermask
         if attr.startswith("_") or attr not in self._fields:
             return object.__getattribute__(self, attr)
 
@@ -352,11 +368,18 @@ class Register(Reloadable, metaclass=RegisterMeta):
                 ftype = int
             else:
                 msb, lsb, ftype = field
-            return ftype((value >> lsb) & ((1 << ((msb + 1) - lsb)) - 1))
+            fvalue = (value >> lsb) & ((1 << ((msb + 1) - lsb)) - 1)
+            try:
+                return ftype(fvalue)
+            except ValueError:
+                return fvalue
         else:
             raise AttributeError(f"Invalid field definition {attr} = {field!r}")
 
     def __setattr__(self, attr, fvalue):
+        if attr == '_other':
+            self._value = (self._value & ~self._othermask) | (fvalue & self._othermask)
+            return
         if attr.startswith("_"):
             self.__dict__[attr] = fvalue
             return
@@ -407,14 +430,17 @@ class Register(Reloadable, metaclass=RegisterMeta):
     def fields(self):
         return {k: getattr(self, k) for k in self._fields_list}
 
-    def str_fields(self):
-        return ', '.join(f'{k}={self._field_val(k)}' for k in self._fields_list)
+    def str_fields(self, as_repr=False, with_other=True):
+        field_reprs = [(k, self._field_val(k, as_repr)) for k in self._fields_list]
+        if with_other and self._other:
+            field_reprs += [('_other', hex(self._other))]
+        return ', '.join(f'{k}={v}' for k, v in field_reprs)
 
     def __str__(self):
         return f"0x{self._value:x} ({self.str_fields()})"
 
     def __repr__(self):
-        return f"{type(self).__name__}({', '.join(f'{k}={self._field_val(k, True)}' for k in self._fields_list)})"
+        return f"{type(self).__name__}({self.str_fields(True, True)})"
 
     def copy(self):
         return type(self)(self._value)
