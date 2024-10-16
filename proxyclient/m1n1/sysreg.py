@@ -152,7 +152,7 @@ class DABORT_DFSC(IntEnum):
     IMPDEF_LOCKDOWN  = 0b110100
     IMPDEF_ATOMIC    = 0b110101
 
-class ESR_ISS_DABORT(Register32):
+class ESR_ISS_DABORT(Register32, allow_overlap=True):
     ISV = 24
     SAS = 23, 22
     SSE = 21
@@ -209,7 +209,7 @@ class ACTLR(Register64):
     DisHWP  = 3
     EnTSO   = 1
 
-class HCR(Register64):
+class HCR(Register64, allow_overlap=True):
     TWEDEL   = 63, 60
     TWEDEn   = 59
     TID5     = 58
