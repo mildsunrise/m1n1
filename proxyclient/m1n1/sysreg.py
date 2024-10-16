@@ -3,10 +3,23 @@ import json, os, re
 from enum import Enum, IntEnum, IntFlag
 from .utils import Register, Register64, Register32
 
+# make the typechecker think we're loading the stub,
+# so that its definitions are in scope:
+if 0 == 1:
+    from sysreg_stub import *
+
 __all__ = ["sysreg_fwd", "sysreg_rev", "SysReg", "SysRegEnc"]
 
-def _load_registers():
+def _load_registers(stub_out=None):
     global sysreg_fwd, sysop_fwd, sysop_fwd_id
+
+    def add_stub_decl(name: str, value, docs: str | None = None):
+        if not stub_out:
+            return
+        print(f"{name} = {repr(value)}", file=stub_out)
+        if docs:
+            print(repr(docs), file=stub_out)
+        print(file=stub_out)
 
     sysreg_fwd = {}
     sysop_fwd = {}
@@ -16,6 +29,7 @@ def _load_registers():
         for reg in data:
             add_fwd = False
             enc = tuple(reg["enc"])
+            docs = reg.get("fullname")
 
             if "accessors" in reg:
                 for acc in reg["accessors"]:
@@ -24,11 +38,18 @@ def _load_registers():
                     else:
                         sysop_fwd[key := acc + " " + reg["name"]] = enc
                         sysop_fwd_id[key := key.replace(" ", "_")] = enc
+                        add_stub_decl(key, enc, docs)
             else:
                 add_fwd = True
 
             if add_fwd:
                 sysreg_fwd[reg["name"]] = enc
+                add_stub_decl(reg["name"], enc, docs)
+
+if __name__ == '__main__':
+    print("Generating stub file for typechecking...")
+    with open(os.path.join(os.path.dirname(__file__), 'sysreg_stub.py'), 'w') as f:
+        _load_registers(f)
 
 _load_registers()
 sysreg_rev = {v: k for k, v in sysreg_fwd.items()}
