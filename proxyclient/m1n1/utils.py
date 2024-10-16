@@ -300,7 +300,7 @@ class Constant:
         return v
 
 class RegisterMeta(ReloadableMeta):
-    def __new__(cls, name, bases, dct):
+    def __new__(cls, name, bases, dct, allow_overlap=False):
         m = super().__new__(cls, name, bases, dct)
 
         f = {}
@@ -328,7 +328,8 @@ class RegisterMeta(ReloadableMeta):
             if hasattr(m, '__WIDTH__'):
                 assert msb < m.__WIDTH__, f'out of bounds field {k}'
             mask = ((1 << ((msb + 1) - lsb)) - 1) << lsb
-            assert globalmask & mask == 0, f'overlapping field {k}'
+            if not allow_overlap:
+                assert globalmask & mask == 0, f'overlapping field {k}'
             globalmask |= mask
         m._othermask = ~globalmask
 
