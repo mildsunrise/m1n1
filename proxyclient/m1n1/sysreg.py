@@ -61,16 +61,16 @@ def sysreg_parse(s: SysReg) -> SysRegEnc:
             raise Exception(f"Unknown sysreg name {s}")
     return enc
 
-def DBGBCRn_EL1(n):
+def DBGBCRn_EL1(n: int):
     return (2,0,0,n,5)
 
-def DBGBVRn_EL1(n):
+def DBGBVRn_EL1(n: int):
     return (2,0,0,n,4)
 
-def DBGWCRn_EL1(n):
+def DBGWCRn_EL1(n: int):
     return (2,0,0,n,7)
 
-def DBGWVRn_EL1(n):
+def DBGWVRn_EL1(n: int):
     return (2,0,0,n,6)
 
 class ESR_EC(IntEnum):

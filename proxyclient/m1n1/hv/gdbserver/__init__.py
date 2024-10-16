@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: MIT
 import errno, io, os, pkgutil, re, selectors, socketserver, threading, traceback
 from construct import Array, BytesInteger, Container, Int32ul, Int64ul, Struct
+from typing import Callable
 
 from ...proxy import *
 from ...sysreg import *
 from ...utils import *
+from .. import *
 
 from ..types import *
 
@@ -21,7 +23,7 @@ class GDBServer:
     )
     __separator = re.compile("[,;:]")
 
-    def __init__(self, hv, address, log):
+    def __init__(self, hv: 'HV', address: str, log: Callable[[str], None]):
         self.__hc = None
         self.__hg = None
         self.__hv = hv

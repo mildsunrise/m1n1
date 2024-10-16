@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+from typing import Callable
 import io, sys, traceback, struct, array, bisect, os, plistlib, signal, runpy
 from construct import *
 
@@ -18,6 +19,19 @@ from .virtutils import *
 from .virtio import *
 
 __all__ = ["HV"]
+
+# FIXME: these types do not represent kwargs
+ReadHandler = Callable[[
+    int, # base
+    int, # addr
+    int, # width (bits)
+], list[int] | int] # value(s) to return to guest
+WriteHandler = Callable[[
+    int, # base
+    int, # addr
+    list[int], # data
+    int, # width (bits)
+], None]
 
 class HV(Reloadable):
     PAC_MASK = 0xfffff00000000000
@@ -97,7 +111,7 @@ class HV(Reloadable):
         self._sigint_pending = False
         self._in_shell = False
         self._gdbserver = None
-        self.vm_hooks = [None]
+        self.vm_hooks: list[tuple[ReadHandler | None, WriteHandler | None, int, dict] | None] = [None]
         self.interrupt_map = {}
         self.mmio_maps = DictRangeMap()
         self.dirty_maps = BoolRangeMap()
@@ -150,10 +164,10 @@ class HV(Reloadable):
             if self.print_tracer.log_file:
                 print("# " + s, *args, file=self.print_tracer.log_file, **kwargs)
 
-    def unmap(self, ipa, size):
+    def unmap(self, ipa: int, size: int):
         assert self.p.hv_map(ipa, 0, size, 0) >= 0
 
-    def map_hw(self, ipa, pa, size):
+    def map_hw(self, ipa: int, pa: int, size: int):
         '''map IPA (Intermediate Physical Address) to actual PA'''
         #print(f"map_hw {ipa:#x} -> {pa:#x} [{size:#x}]")
         if (ipa & 0x3fff) != (pa & 0x3fff):
@@ -177,16 +191,16 @@ class HV(Reloadable):
         if size_p != size:
             self.map_sw(ipa_p + size_p, pa + size_p, size - size_p)
 
-    def map_sw(self, ipa, pa, size):
+    def map_sw(self, ipa: int, pa: int, size: int):
         #print(f"map_sw {ipa:#x} -> {pa:#x} [{size:#x}]")
         assert self.p.hv_map(ipa, pa | self.SPTE_MAP, size, 1) >= 0
 
-    def map_hook(self, ipa, size, read=None, write=None, **kwargs):
+    def map_hook(self, ipa: int, size: int, read: ReadHandler | None = None, write: WriteHandler | None = None, **kwargs):
         index = len(self.vm_hooks)
         self.vm_hooks.append((read, write, ipa, kwargs))
         self.map_hook_idx(ipa, size, index, read is not None, write is not None)
 
-    def map_hook_idx(self, ipa, size, index, read=False, write=False, flags=0):
+    def map_hook_idx(self, ipa: int, size: int, index: int, read=False, write=False, flags=0):
         if read:
             if write:
                 t = self.SPTE_PROXY_HOOK_RW
@@ -199,7 +213,7 @@ class HV(Reloadable):
 
         assert self.p.hv_map(ipa, (index << 2) | flags | t, size, 0) >= 0
 
-    def readmem(self, va, size):
+    def readmem(self, va: int, size: int):
         '''read from virtual memory'''
         with io.BytesIO() as buffer:
             while size > 0:
@@ -218,7 +232,7 @@ class HV(Reloadable):
 
             return buffer.getvalue()
 
-    def writemem(self, va, data):
+    def writemem(self, va: int, data: bytes):
         '''write to virtual memory'''
         written = 0
         while written < len(data):
@@ -1168,7 +1182,7 @@ class HV(Reloadable):
         if self.ctx.cpu_id != cpu:
             raise Exception(f"Switching to CPU #{cpu} but ended on #{self.ctx.cpu_id}")
 
-    def add_hw_bp(self, vaddr, hook=None):
+    def add_hw_bp(self, vaddr: int, hook=None):
         if None not in self._bps:
             raise ValueError("Cannot add more HW breakpoints")
 
@@ -1184,7 +1198,7 @@ class HV(Reloadable):
         if hook is not None:
             self._bp_hooks[vaddr] = hook
 
-    def remove_hw_bp(self, vaddr):
+    def remove_hw_bp(self, vaddr: int):
         idx = self._bps.index(vaddr)
         self._bps[idx] = None
         cpu_id = self.ctx.cpu_id
