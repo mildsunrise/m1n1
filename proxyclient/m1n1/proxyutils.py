@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+from typing import Literal, Callable
 import serial, os, struct, sys, time, json, os.path, gzip, functools
 from contextlib import contextmanager
 from construct import *
@@ -38,9 +39,14 @@ VERSION_MAP = {
     "iBoot-8422.141.2": "V13_5",
 }
 
+ExecMode = Literal["el2" , "el1" , "el0" , "gl2" , "gl1"] | None
+CallFn = Callable[[int, int, int, int, int], int]
+CallWithRegion = tuple[CallFn, int]
+CallOrExecMode = CallFn | CallWithRegion | ExecMode
+
 class ProxyUtils(Reloadable):
     CODE_BUFFER_SIZE = 0x10000
-    def __init__(self, p, heap_size=1024 * 1024 * 1024):
+    def __init__(self, p: M1N1Proxy, heap_size=1024 * 1024 * 1024):
         self.iface = p.iface
         self.proxy = p
         self.base = p.get_base()
@@ -87,7 +93,7 @@ class ProxyUtils(Reloadable):
 
         self.inst_cache = {}
 
-        self.exec_modes = {
+        self.exec_modes: dict[ExecMode, CallWithRegion] = {
             None: (self.proxy.call, REGION_RX_EL1),
             "el2": (self.proxy.call, REGION_RX_EL1),
             "el1": (self.proxy.el1_call, 0),
@@ -157,7 +163,7 @@ class ProxyUtils(Reloadable):
         if self.proxy.get_exc_count():
             raise ProxyError("Exception occurred")
 
-    def mrs(self, reg, *, silent=False, call=None):
+    def mrs(self, reg: SysReg, *, silent=False, call: CallOrExecMode = None):
         '''read system register reg'''
         op0, op1, CRn, CRm, op2 = sysreg_parse(reg)
 
@@ -166,7 +172,7 @@ class ProxyUtils(Reloadable):
 
         return self.exec(op, call=call, silent=silent)
 
-    def msr(self, reg, val, *, silent=False, call=None):
+    def msr(self, reg: SysReg, val, *, silent=False, call: CallOrExecMode = None):
         '''Write val to system register reg'''
         op0, op1, CRn, CRm, op2 = sysreg_parse(reg)
 
@@ -178,7 +184,7 @@ class ProxyUtils(Reloadable):
     sys = msr
     sysl = mrs
 
-    def exec(self, op, r0=0, r1=0, r2=0, r3=0, *, silent=False, call=None, ignore_exceptions=False):
+    def exec(self, op: str | list[int] | tuple[int] | int | bytes, r0=0, r1=0, r2=0, r3=0, *, silent=False, call: CallOrExecMode = None, ignore_exceptions=False):
         if callable(call):
             region = REGION_RX_EL1
         elif isinstance(call, tuple):

@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: MIT
 import platform, os, sys, struct, serial, time
+from typing import Callable
 from construct import *
 from enum import IntEnum, IntFlag
 from serial.tools.miniterm import Miniterm
 
+from .malloc import Heap
 from .utils import *
 from .sysreg import *
 
@@ -161,7 +163,7 @@ class UartInterface(Reloadable):
             #d = self.dev.read(1)
         self.dev.timeout = int(os.environ.get("M1N1TIMEOUT", "3"))
         self.tty_enable = True
-        self.handlers = {}
+        self.handlers: dict[tuple[START, EXC], Callable[[START, EXC, int]]] = {}
         self.evt_handlers = {}
         self.enabled_features = Feature(0)
 
@@ -241,7 +243,7 @@ class UartInterface(Reloadable):
         dev.timeout = tout
         self.tty_enable = False
 
-    def reply(self, cmd):
+    def reply(self, cmd: int) -> bytes:
         reply = b''
         while True:
             if not reply or reply[-1] != 255:
@@ -643,12 +645,12 @@ class M1N1Proxy(Reloadable):
 
     P_CPUFREQ_INIT = 0x1300
 
-    def __init__(self, iface, debug=False):
+    def __init__(self, iface: UartInterface, debug=False):
         self.debug = debug
         self.iface = iface
-        self.heap = None
+        self.heap: Heap | None = None
 
-    def _request(self, opcode, *args, reboot=False, signed=False, no_reply=False, pre_reply=None):
+    def _request(self, opcode: int, *args, reboot=False, signed=False, no_reply=False, pre_reply=None) -> int:
         if len(args) > 6:
             raise ValueError("Too many arguments")
         args = list(args) + [0] * (6 - len(args))
@@ -663,7 +665,7 @@ class M1N1Proxy(Reloadable):
         if self.debug:
             print(">>>> %08x: %d %08x"%(rop, status, retval))
         if reboot:
-            return
+            return # FIXME: we ignore this case for now
         if rop != opcode:
             raise ProxyReplyError("Reply opcode mismatch: Expected 0x%08x, got 0x%08x"%(opcode,rop))
         if status != self.S_OK:

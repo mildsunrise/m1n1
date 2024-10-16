@@ -3,7 +3,7 @@ import json, os, re
 from enum import Enum, IntEnum, IntFlag
 from .utils import Register, Register64, Register32
 
-__all__ = ["sysreg_fwd", "sysreg_rev"]
+__all__ = ["sysreg_fwd", "sysreg_rev", "SysReg", "SysRegEnc"]
 
 def _load_registers():
     global sysreg_fwd, sysop_fwd
@@ -32,14 +32,17 @@ __all__.extend(sysreg_fwd.keys())
 globals().update(sysop_fwd_id)
 __all__.extend(sysop_fwd_id.keys())
 
-def sysreg_name(enc):
+SysRegEnc = tuple[int, int, int, int, int]
+SysReg = str | SysRegEnc
+
+def sysreg_name(enc: SysRegEnc) -> str:
     if enc in sysreg_rev:
         return sysreg_rev[enc]
     if enc in sysop_rev:
         return sysop_rev[enc]
     return f"s{enc[0]}_{enc[1]}_c{enc[2]}_c{enc[3]}_{enc[4]}"
 
-def sysreg_parse(s):
+def sysreg_parse(s: SysReg) -> SysRegEnc:
     if isinstance(s, tuple) or isinstance(s, list):
         return tuple(s)
     s = s.strip()
