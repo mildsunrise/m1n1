@@ -4,13 +4,14 @@ from construct import *
 
 from ..asm import ARMAsm
 from ..tgtypes import *
-from ..proxy import IODEV, START, EVENT, EXC, EXC_RET, ExcInfo
+from ..proxy import M1N1Proxy, UartInterface, IODEV, START, EVENT, EXC, EXC_RET, ExcInfo
 from ..utils import *
 from ..sysreg import *
 from ..macho import MachO
 from ..adt import load_adt
 from .. import xnutools, shell
 
+from .. import proxyutils
 from .gdbserver import *
 from .types import *
 from .virtutils import *
@@ -74,7 +75,7 @@ class HV(Reloadable):
     AIC_EVT_TYPE_HW = 1
     IRQTRACE_IRQ = 1
 
-    def __init__(self, iface, proxy, utils):
+    def __init__(self, iface: UartInterface, proxy: M1N1Proxy, utils: proxyutils.ProxyUtils):
         self.iface = iface
         self.p = proxy
         self.u = utils
@@ -83,7 +84,7 @@ class HV(Reloadable):
         self.vbar_el1 = None
         self.want_vbar = None
         self.vectors = [None]
-        self._bps = [None, None, None, None, None]
+        self._bps: list[int | None] = [None, None, None, None, None]
         self._bp_hooks = dict()
         self._wps = [None, None, None, None]
         self._wpcs = [0, 0, 0, 0]
@@ -934,7 +935,7 @@ class HV(Reloadable):
             self.iface.writemem(self.exc_info, new_info)
             self._info_data = new_info
 
-    def handle_exception(self, reason, code, info):
+    def handle_exception(self, reason: START, code: EXC, info: int):
         self.exc_info = info
         self.exc_reason = reason
         if reason in (START.EXCEPTION_LOWER, START.EXCEPTION):
