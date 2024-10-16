@@ -6,26 +6,33 @@ from .utils import Register, Register64, Register32
 __all__ = ["sysreg_fwd", "sysreg_rev", "SysReg", "SysRegEnc"]
 
 def _load_registers():
-    global sysreg_fwd, sysop_fwd
+    global sysreg_fwd, sysop_fwd, sysop_fwd_id
 
     sysreg_fwd = {}
     sysop_fwd = {}
+    sysop_fwd_id = {}
     for fname in ["arm_regs.json", "apple_regs.json"]:
         data = json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "tools", fname)))
         for reg in data:
+            add_fwd = False
+            enc = tuple(reg["enc"])
+
             if "accessors" in reg:
                 for acc in reg["accessors"]:
                     if acc in ("MRS", "MSR"):
-                        sysreg_fwd[reg["name"]] = tuple(reg["enc"])
+                        add_fwd = True
                     else:
-                        sysop_fwd[acc + " " + reg["name"]] = tuple(reg["enc"])
+                        sysop_fwd[key := acc + " " + reg["name"]] = enc
+                        sysop_fwd_id[key := key.replace(" ", "_")] = enc
             else:
-                sysreg_fwd[reg["name"]] = tuple(reg["enc"])
+                add_fwd = True
+
+            if add_fwd:
+                sysreg_fwd[reg["name"]] = enc
 
 _load_registers()
 sysreg_rev = {v: k for k, v in sysreg_fwd.items()}
 sysop_rev = {v: k for k, v in sysop_fwd.items()}
-sysop_fwd_id = {k.replace(" ", "_"): v for k,v in sysop_fwd.items()}
 
 globals().update(sysreg_fwd)
 __all__.extend(sysreg_fwd.keys())
