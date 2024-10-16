@@ -4,7 +4,7 @@ from contextlib import contextmanager
 __all__ = ["Heap"]
 
 class Heap(object):
-    def __init__(self, start, end, block=64):
+    def __init__(self, start: int, end: int, block=64):
         if start%block:
             raise ValueError("heap start not aligned")
         if end%block:
@@ -14,7 +14,7 @@ class Heap(object):
         self.blocks = [(self.count,False)]
         self.block = block
 
-    def malloc(self, size):
+    def malloc(self, size: int):
         size = (size + self.block - 1) // self.block
         pos = 0
         for i, (bsize, full) in enumerate(self.blocks):
@@ -26,7 +26,7 @@ class Heap(object):
             pos += bsize
         raise Exception("Out of memory")
 
-    def memalign(self, align, size):
+    def memalign(self, align: int, size: int):
         assert (align & (align - 1)) == 0
         align = max(align, self.block) // self.block
         size = (size + self.block - 1) // self.block
@@ -47,7 +47,7 @@ class Heap(object):
             pos += bsize
         raise Exception("Out of memory")
 
-    def free(self, addr):
+    def free(self, addr: int):
         if addr%self.block:
             raise ValueError("free address not aligned")
         if addr<self.offset:

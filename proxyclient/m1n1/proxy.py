@@ -167,7 +167,7 @@ class UartInterface(Reloadable):
         self.evt_handlers = {}
         self.enabled_features = Feature(0)
 
-    def checksum(self, data):
+    def checksum(self, data: bytes):
         sum = 0xDEADBEEF;
         for c in data:
             sum *= 31337
@@ -176,13 +176,13 @@ class UartInterface(Reloadable):
 
         return (sum ^ 0xADDEDBAD) & 0xFFFFFFFF
 
-    def data_checksum(self, data):
+    def data_checksum(self, data: bytes):
         if self.enabled_features & Feature.DISABLE_DATA_CSUMS:
             return self.CHECKSUM_SENTINEL
 
         return self.checksum(data)
 
-    def readfull(self, size):
+    def readfull(self, size: int) -> bytes:
         d = b''
         while len(d) < size:
             block = self.dev.read(size - len(d))
@@ -191,7 +191,7 @@ class UartInterface(Reloadable):
             d += block
         return d
 
-    def cmd(self, cmd, payload=b""):
+    def cmd(self, cmd: int, payload=b""):
         if len(payload) > self.CMD_LEN:
             raise ValueError("Incorrect payload size %d"%len(payload))
 
@@ -263,7 +263,7 @@ class UartInterface(Reloadable):
                 self.unkhandler(reply)
                 continue
             reply += self.readfull(1)
-            cmdin = struct.unpack("<I", reply)[0]
+            cmdin: int = struct.unpack("<I", reply)[0]
             if cmdin == self.REQ_EVENT:
                 reply += self.readfull(self.EVENT_HDR_LEN - 4)
                 data_len, event_type = struct.unpack("<HH", reply[4:])
@@ -282,7 +282,8 @@ class UartInterface(Reloadable):
             reply += self.readfull(self.REPLY_LEN - 4)
             if self.debug:
                 print(">>", hexdump(reply))
-            status, data, checksum = struct.unpack("<i24sI", reply[4:])
+            __parsed: tuple[int, bytes, int] = struct.unpack("<i24sI", reply[4:])
+            status, data, checksum = __parsed
             ccsum = self.checksum(reply[:-4])
             if checksum != ccsum:
                 print("Reply checksum error: Expected 0x%08x, got 0x%08x"%(checksum, ccsum))
@@ -307,7 +308,7 @@ class UartInterface(Reloadable):
                     raise UartRemoteError("Reply error: Unknown error (%d)"%status)
             return data
 
-    def handle_boot(self, data):
+    def handle_boot(self, data: bytes):
         reason, code, info = struct.unpack("<IIQ", data[:16])
         reason = START(reason)
         if reason in (START.EXCEPTION, START.EXCEPTION_LOWER):
@@ -368,7 +369,7 @@ class UartInterface(Reloadable):
 
         self.enabled_features = features
 
-    def proxyreq(self, req, reboot=False, no_reply=False, pre_reply=None):
+    def proxyreq(self, req: bytes, reboot=False, no_reply=False, pre_reply=None):
         self.cmd(self.REQ_PROXY, req)
         if pre_reply:
             pre_reply()
@@ -379,7 +380,7 @@ class UartInterface(Reloadable):
         else:
             return self.reply(self.REQ_PROXY)
 
-    def writemem(self, addr, data, progress=False):
+    def writemem(self, addr: int, data: bytes, progress=False):
         checksum = self.data_checksum(data)
         size = len(data)
         req = struct.pack("<QQI", addr, size, checksum)
@@ -401,7 +402,7 @@ class UartInterface(Reloadable):
         # should automatically report a CRC failure
         self.reply(self.REQ_MEMWRITE)
 
-    def readmem(self, addr, size):
+    def readmem(self, addr: int, size: int):
         if size == 0:
             return b""
 
@@ -426,7 +427,7 @@ class UartInterface(Reloadable):
 
         return data
 
-    def readstruct(self, addr, stype):
+    def readstruct(self, addr: int, stype: Struct):
         return stype.parse(self.readmem(addr, stype.sizeof()))
 
 class ProxyError(RuntimeError):
@@ -661,7 +662,8 @@ class M1N1Proxy(Reloadable):
         if no_reply or reboot and reply is None:
             return
         ret_fmt = "q" if signed else "Q"
-        rop, status, retval = struct.unpack("<Qq" + ret_fmt, reply)
+        __unpack: tuple[int, int, int] = struct.unpack("<Qq" + ret_fmt, reply)
+        rop, status, retval = __unpack
         if self.debug:
             print(">>>> %08x: %d %08x"%(rop, status, retval))
         if reboot:
@@ -675,7 +677,7 @@ class M1N1Proxy(Reloadable):
                 raise ProxyRemoteError("Reply error: Unknown error (%d)"%status)
         return retval
 
-    def request(self, opcode, *args, **kwargs):
+    def request(self, opcode: int, *args, **kwargs):
         free = []
         args = list(args)
         args2 = []

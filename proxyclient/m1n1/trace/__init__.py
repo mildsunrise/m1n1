@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-from ..hv import TraceMode
+from ..hv import HV, TraceMode
 from ..utils import *
 
 __all__ = []
@@ -53,10 +53,10 @@ class TracerState:
 class Tracer(Reloadable):
     DEFAULT_MODE = TraceMode.ASYNC
 
-    def __init__(self, hv, verbose=False, ident=None):
+    def __init__(self, hv: HV, verbose=False, ident=None):
         self.hv = hv
         self.ident = ident or type(self).__name__
-        self.regmaps = {}
+        self.regmaps: dict[int, RegMap] = {}
         self.verbose = verbose
         self.state = TracerState()
         self.init_state()
@@ -79,7 +79,7 @@ class Tracer(Reloadable):
     def hook_r(self, addr, width, **kwargs):
         return self.hv.u.read(addr, width)
 
-    def evt_rw(self, evt, regmap=None, prefix=None):
+    def evt_rw(self, evt, regmap: RegMap | None = None, prefix: str | None = None):
         self._cache.update(evt.addr, evt.data)
         reg = rcls = None
         value = evt.data
@@ -115,7 +115,7 @@ class Tracer(Reloadable):
                 m = "+" if evt.flags.MULTI else " "
                 self.log(f"MMIO: {t.upper()}.{1<<evt.flags.WIDTH:<2}{m} " + s)
 
-    def trace(self, start, size, mode, read=True, write=True, **kwargs):
+    def trace(self, start: int, size: int, mode: TraceMode, read=True, write=True, **kwargs):
         zone = irange(start, size)
         if mode == TraceMode.HOOK:
             self.hv.add_tracer(zone, self.ident, mode, self.hook_r if read else None,
@@ -124,7 +124,7 @@ class Tracer(Reloadable):
             self.hv.add_tracer(zone, self.ident, mode, self.evt_rw if read else None,
                                self.evt_rw if write else None, **kwargs)
 
-    def trace_regmap(self, start, size, cls, mode=None, name=None, prefix=None, regmap_offset=0):
+    def trace_regmap(self, start: int, size: int, cls: type[RegMap], mode=None, name=None, prefix=None, regmap_offset=0):
         if mode is None:
             mode = self.DEFAULT_MODE
         if name is None:
@@ -147,11 +147,11 @@ class Tracer(Reloadable):
     def stop(self):
         self.hv.clear_tracers(self.ident)
 
-    def log(self, msg, show_cpu=True):
+    def log(self, msg: str, show_cpu=True):
         self.hv.log(f"[{self.ident}] {msg}", show_cpu=show_cpu)
 
 class PrintTracer(Tracer):
-    def __init__(self, hv, device_addr_tbl):
+    def __init__(self, hv: HV, device_addr_tbl):
         super().__init__(hv)
         self.device_addr_tbl = device_addr_tbl
         self.log_file = None

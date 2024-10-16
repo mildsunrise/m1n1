@@ -3,6 +3,7 @@ import struct
 
 from . import asm, sysreg
 from .proxyutils import GuardedHeap
+from . import proxyutils
 
 __all__ = ["dynamic_regs", "impdef_regs", "static_regs", "find_regs"]
 
@@ -21,7 +22,7 @@ dynamic_regs = [
 impdef_regs = list(_all())
 static_regs = [i for i in _all() if i not in dynamic_regs]
 
-def find_regs(u, regs=None, block=1024, call=None, values=True):
+def find_regs(u: proxyutils.ProxyUtils, regs=None, block=1024, call=None, values=True):
     if regs is None:
         regs = impdef_regs
 

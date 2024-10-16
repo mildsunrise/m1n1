@@ -506,7 +506,10 @@ class RegMonitor(Reloadable):
         self.last = cur
 
 class GuardedHeap:
-    def __init__(self, malloc, memalign=None, free=None):
+    def __init__(self,
+                 malloc: Callable[[int], int] | Heap,
+                 memalign: Callable[[int, int], int] | None = None,
+                 free: Callable[[int], None] | None =None):
         if isinstance(malloc, Heap):
             malloc, memalign, free = malloc.malloc, malloc.memalign, malloc.free
 
@@ -522,17 +525,17 @@ class GuardedHeap:
         self.free_all()
         return False
 
-    def malloc(self, sz):
+    def malloc(self, sz: int):
         ptr = self._malloc(sz)
         self.ptrs.add(ptr)
         return ptr
 
-    def memalign(self, align, sz):
+    def memalign(self, align: int, sz: int):
         ptr = self._memalign(align, sz)
         self.ptrs.add(ptr)
         return ptr
 
-    def free(self, ptr):
+    def free(self, ptr: int):
         self.ptrs.remove(ptr)
         self._free(ptr)
 
