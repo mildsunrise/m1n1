@@ -6,7 +6,7 @@ from construct import *
 
 from .asm import ARMAsm
 from .proxy import *
-from .utils import Reloadable, chexdiff32
+from .utils import Reloadable, chexdiff32, align_up
 from .tgtypes import *
 from .sysreg import *
 from .malloc import Heap
@@ -53,6 +53,10 @@ class ProxyUtils(Reloadable):
         self.ba_addr = p.get_bootargs()
 
         self.ba = self.iface.readstruct(self.ba_addr, BootArgs)
+
+        # generate a usable value for mem_size_actual if missing, in the same way as startup.c
+        if self.ba.mem_size_actual == 0:
+            self.ba.mem_size_actual = align_up(self.ba.phys_base + self.ba.mem_size - 0x800000000, 1 << 30)
 
         # We allocate a 128MB heap, 128MB after the m1n1 heap, without telling it about it.
         # This frees up from having to coordinate memory management or free stuff after a Python
