@@ -1,0 +1,3 @@
+[diff "adt"]
+    textconv = "python -m proxyclient.m1n1.adt --sort-keys --sort-nodes"
+    xfuncname = "^ *[a-zA-Z0-9_-]+ \\{$"
