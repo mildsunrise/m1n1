@@ -230,6 +230,7 @@ build/$(NAME).macho: build/$(NAME).elf
 build/$(NAME).bin: build/$(NAME)-raw.elf
 	$(QUIET)echo "  RAW   $@"
 	$(QUIET)$(OBJCOPY) -O binary --strip-debug $< $@
+	$(QUIET)python -c "import hashlib, sys; sys.stdout.buffer.write(hashlib.sha256(open('build/m1n1.bin', 'rb').read()).digest())" >> $@
 
 update_tag:
 	$(QUIET)mkdir -p build
