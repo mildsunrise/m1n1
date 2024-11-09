@@ -243,6 +243,7 @@ ifeq ($(LOGO),)
 build/$(NAME).bin: build/$(NAME)-raw.elf
 	$(QUIET)echo "  RAW   $@"
 	$(QUIET)$(OBJCOPY) -O binary --strip-debug $< $@
+	$(QUIET)python -c "import hashlib, sys; sys.stdout.buffer.write(hashlib.sha256(open('build/m1n1.bin', 'rb').read()).digest())" >> $@
 
 else
 build/$(NAME)-asahi.bin: build/$(NAME)-raw.elf
