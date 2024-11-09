@@ -283,9 +283,9 @@ static int hpm_for_each_in_i2c_bus(const char *i2c_path, hpm_callback_t cb, void
         if (idx < 0) continue;
         snprintf(hpm_path, sizeof(hpm_path), "%s/%s/%s", i2c_path, hpm_mngr_name, name);
 
-        tps6598x_dev_t *tps = tps6598x_init(hpm_path, i2c);
+        tps6598x_dev_t *tps = tps6598x_init_i2c(hpm_path, i2c);
         if (!tps) {
-            printf("usb: tps6598x_init failed for %s.\n", hpm_path);
+            printf("usb: tps6598x_init_i2c failed for %s.\n", hpm_path);
             continue;
         }
         cb(tps, idx, data);
