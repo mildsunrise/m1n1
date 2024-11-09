@@ -304,7 +304,7 @@ int payload_run(void)
         return -1;
     }
 
-    void *p = _payload_start;
+    void *p = _payload_start + 32;
 
     while (p)
         p = load_one_payload(p, 0);
