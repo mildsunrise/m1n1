@@ -201,6 +201,18 @@ void aic_set_sw(int irq, bool active)
                 MASK_BIT(irq));
 }
 
+void aic_set_mask(int irq, bool active)
+{
+    u32 die = irq / aic->max_irq;
+    irq = irq % aic->max_irq;
+    if (active)
+        write32(aic->base + aic->regs.mask_set + die * aic->intmaskset_stride + MASK_REG(irq),
+                MASK_BIT(irq));
+    else
+        write32(aic->base + aic->regs.mask_clr + die * aic->intmaskclear_stride + MASK_REG(irq),
+                MASK_BIT(irq));
+}
+
 void aic_write(u32 reg, u32 val)
 {
     write32(aic->base + reg, val);
