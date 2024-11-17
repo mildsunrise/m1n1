@@ -76,10 +76,9 @@ class HpmSPMI:
         written = 0
         while written < len(data):
             to_write = min(len(data) - written, 16)
-            reply = self.spmi.write_ext(self.slave, 0xA0 + written, data[written:written + to_write])
+            reply = self.spmi.write_ext(self.slave, 0x20 + written, data[written:written + to_write])
             assert reply
             written += to_write
-        self.select(reg) # issue write
 
     def command(self, cmd: bytes, data: bytes, out_size: int):
         self.write(9, data)

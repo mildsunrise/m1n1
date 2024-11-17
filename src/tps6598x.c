@@ -102,7 +102,7 @@ static int tps6598x_write(tps6598x_dev_t *dev, u8 reg, const u8 *bfr, size_t len
     if (tps6598x_spmi_select_checked(dev, reg, len) < 0)
         return -1;
 
-    u8 addr = 0xa0;
+    u8 addr = 0x20;
     while (len) {
         size_t block = min(len, 16);
         if (spmi_ext_write(dev->spmi, dev->addr, addr, bfr, block) < 0)
@@ -110,10 +110,7 @@ static int tps6598x_write(tps6598x_dev_t *dev, u8 reg, const u8 *bfr, size_t len
         addr += block, bfr += block, len -= block;
     }
 
-    // re-select the register to issue the write
-    if (tps6598x_spmi_select(dev, reg) < 0)
-        return -1;
-    return 0;
+        return 0;
 }
 
 static int tps6598x_wakeup(tps6598x_dev_t *dev)
