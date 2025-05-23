@@ -728,7 +728,8 @@ class M1N1Proxy(Reloadable):
         return self.request(self.P_GET_BOOTARGS)
     def get_bootargs_rev(self):
         ba_addr = self.request(self.P_GET_BOOTARGS)
-        rev = self.read16(ba_addr)
+        # some versions of iBSS do not align bootargs
+        rev = self.read16(ba_addr, force=True)
         return (ba_addr, rev)
     def get_base(self):
         return self.request(self.P_GET_BASE)
@@ -777,79 +778,79 @@ class M1N1Proxy(Reloadable):
     def get_chipid(self):
         return self.request(self.P_GET_CHIPID)
 
-    def write64(self, addr, data):
+    def write64(self, addr, data, force=False):
         '''write 8 byte value to given address'''
-        if addr & 7:
+        if addr & 7 and not force:
             raise AlignmentError()
         self.request(self.P_WRITE64, addr, data)
-    def write32(self, addr, data):
+    def write32(self, addr, data, force=False):
         '''write 4 byte value to given address'''
-        if addr & 3:
+        if addr & 3 and not force:
             raise AlignmentError()
         self.request(self.P_WRITE32, addr, data)
-    def write16(self, addr, data):
+    def write16(self, addr, data, force=False):
         '''write 2 byte value to given address'''
-        if addr & 1:
+        if addr & 1 and not force:
             raise AlignmentError()
         self.request(self.P_WRITE16, addr, data)
     def write8(self, addr, data):
         '''write 1 byte value to given address'''
         self.request(self.P_WRITE8, addr, data)
 
-    def read64(self, addr):
+    def read64(self, addr, force=False):
         '''return 8 byte value from given address'''
-        if addr & 7:
+        if addr & 7 and not force:
             raise AlignmentError()
         return self.request(self.P_READ64, addr)
-    def read32(self, addr):
+    def read32(self, addr, force=False):
         '''return 4 byte value given address'''
-        if addr & 3:
+        if addr & 3 and not force:
             raise AlignmentError()
         return self.request(self.P_READ32, addr)
-    def read16(self, addr):
+    def read16(self, addr, force=False):
         '''return 2 byte value from given address'''
-        if addr & 1:
+        if addr & 1 and not force:
             raise AlignmentError()
         return self.request(self.P_READ16, addr)
     def read8(self, addr):
         '''return 1 byte value from given address'''
         return self.request(self.P_READ8, addr)
 
-    def set64(self, addr, data):
+    def set64(self, addr, data, force=False):
         '''Or 64 bit value of data into memory at addr and return result'''
-        if addr & 7:
+        if addr & 7 and not force:
             raise AlignmentError()
         return self.request(self.P_SET64, addr, data)
-    def set32(self, addr, data):
+    def set32(self, addr, data, force=False):
         '''Or 32 bit value of data into memory at addr and return result'''
-        if addr & 3:
+        if addr & 3 and not force:
             raise AlignmentError()
         return self.request(self.P_SET32, addr, data)
-    def set16(self, addr, data):
+    def set16(self, addr, data, force=False):
         '''Or 16 bit value of data into memory at addr and return result'''
-        if addr & 1:
+        if addr & 1 and not force:
             raise AlignmentError()
         return self.request(self.P_SET16, addr, data)
     def set8(self, addr, data):
         '''Or byte value of data into memory at addr and return result'''
         return self.request(self.P_SET8, addr, data)
 
-    def clear64(self, addr, data):
+    def clear64(self, addr, data, force=False):
         '''Clear bits in 64 bit memory at address addr that are set
     in parameter data and return result'''
-        if addr & 7:
+        if addr & 7 and not force:
             raise AlignmentError()
         return self.request(self.P_CLEAR64, addr, data)
-    def clear32(self, addr, data):
+    def clear32(self, addr, data, force=False):
         '''Clear bits in 32 bit memory at address addr that are set
     in parameter data and return result'''
-        if addr & 3:
+        if addr & 3 and not force:
             raise AlignmentError()
         return self.request(self.P_CLEAR32, addr, data)
-    def clear16(self, addr, data):
+    def clear16(self, addr, data, force=False):
         '''Clear bits in 16 bit memory at address addr that are set
     in parameter data and return result'''
-        if addr & 1:
+        if addr & 1 and not force:
             raise AlignmentError()
         return self.request(self.P_CLEAR16, addr, data)
     def clear8(self, addr, data):
@@ -857,22 +858,22 @@ class M1N1Proxy(Reloadable):
     and return result'''
         return self.request(self.P_CLEAR8, addr, data)
 
-    def mask64(self, addr, clear, set):
+    def mask64(self, addr, clear, set, force=False):
         '''Clear bits in 64 bit memory at address addr that are
  set in clear, then set the bits in set and return result'''
-        if addr & 7:
+        if addr & 7 and not force:
             raise AlignmentError()
         return self.request(self.P_MASK64, addr, clear, set)
-    def mask32(self, addr, clear, set):
+    def mask32(self, addr, clear, set, force=False):
         '''Clear bits in 32 bit memory at address addr that are
  set in clear, then set the bits in set and return result'''
-        if addr & 3:
+        if addr & 3 and not force:
             raise AlignmentError()
         return self.request(self.P_MASK32, addr, clear, set)
-    def mask16(self, addr, clear, set):
+    def mask16(self, addr, clear, set, force=False):
         '''Clear select bits in 16 bit memory addr that are set
  in clear parameter, then set the bits in set parameter and return result'''
-        if addr & 1:
+        if addr & 1 and not force:
             raise AlignmentError()
         return self.request(self.P_MASK16, addr, clear, set)
     def mask8(self, addr, clear, set):
@@ -890,31 +891,31 @@ class M1N1Proxy(Reloadable):
     def writeread8(self, addr, data):
         return self.request(self.P_WRITEREAD8, addr, data)
 
-    def memcpy64(self, dst, src, size):
-        if src & 7 or dst & 7:
+    def memcpy64(self, dst, src, size, force=False):
+        if (src & 7 or dst & 7) and not force:
             raise AlignmentError()
         self.request(self.P_MEMCPY64, dst, src, size)
-    def memcpy32(self, dst, src, size):
-        if src & 3 or dst & 3:
+    def memcpy32(self, dst, src, size, force=False):
+        if (src & 3 or dst & 3) and not force:
             raise AlignmentError()
         self.request(self.P_MEMCPY32, dst, src, size)
-    def memcpy16(self, dst, src, size):
-        if src & 1 or dst & 1:
+    def memcpy16(self, dst, src, size, force=False):
+        if (src & 1 or dst & 1) and not force:
             raise AlignmentError()
         self.request(self.P_MEMCPY16, dst, src, size)
     def memcpy8(self, dst, src, size):
         self.request(self.P_MEMCPY8, dst, src, size)
 
-    def memset64(self, dst, src, size):
-        if dst & 7:
+    def memset64(self, dst, src, size, force=False):
+        if dst & 7 and not force:
             raise AlignmentError()
         self.request(self.P_MEMSET64, dst, src, size)
-    def memset32(self, dst, src, size):
-        if dst & 3:
+    def memset32(self, dst, src, size, force=False):
+        if dst & 3 and not force:
             raise AlignmentError()
         self.request(self.P_MEMSET32, dst, src, size)
-    def memset16(self, dst, src, size):
-        if dst & 1:
+    def memset16(self, dst, src, size, force=False):
+        if dst & 1 and not force:
             raise AlignmentError()
         self.request(self.P_MEMSET16, dst, src, size)
     def memset8(self, dst, src, size):
