@@ -82,7 +82,7 @@ void run_actions(void)
         printf("Boot policy: sip0 = %ld\n", lp_sip0);
     }
 
-    if (!cur_boot_args.video.display && lp_sip0 == 127) {
+    if (lp_sip0 == 127) {
         printf("Bringing up USB for early debug...\n");
 
         usb_init();
