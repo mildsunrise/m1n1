@@ -25,4 +25,26 @@ def init_symbols():
         globals()[f'sym_{kind}_{name}'] = addr
 init_symbols()
 
+aic_base = (aic_dt := u.adt['arm-io/aic']).get_reg(0)[0]
+aic_extint = aic_base + aic_dt.extint_baseaddress
+aic_maxirq = p.read32(aic_base + aic_dt.maxnumirq_offset) & 0xFFFF
+aic_nirq = p.read32(aic_base + aic_dt.cap0_offset) & 0xFFFF
+aic_bit_write = lambda n, irq: p.write32(aic_extint + 4*( aic_maxirq + (aic_maxirq//32) * n + irq//32 ), 1<<(irq%32))
+aic_sw_set = lambda irq: aic_bit_write(0, irq)
+aic_sw_clr = lambda irq: aic_bit_write(1, irq)
+aic_mask = lambda irq: aic_bit_write(2, irq)
+aic_unmask = lambda irq: aic_bit_write(3, irq)
+p.set32(aic_base + 0x14, 1) # config |= enable
+
+def alloc_str(x: str | bytes):
+    data = x.encode() if isinstance(x, str) else x
+    assert all(data), 'NUL terminators in string'
+    ptr = p.malloc(48)
+    for i, c in enumerate(data + b'\0'):
+        p.write8(ptr + i, c)
+    return ptr
+
+spmia0 = SPMI(u, 'arm-io/nub-spmi-a0')
+spmia1 = SPMI(u, 'arm-io/nub-spmi-a1')
+
 run_shell(globals(), msg="Have fun!")

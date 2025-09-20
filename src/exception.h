@@ -51,6 +51,44 @@ uint64_t el0_call(void *func, uint64_t a, uint64_t b, uint64_t c, uint64_t d);
 uint64_t el1_call(void *func, uint64_t a, uint64_t b, uint64_t c, uint64_t d);
 uint64_t el3_call(void *func, uint64_t a, uint64_t b, uint64_t c, uint64_t d);
 
+struct spmi_irq_event {
+    u32 regs [9];
+};
+
+struct irq_event {
+    u64 time;
+    u32 num;
+    struct spmi_irq_event spmi;
+};
+
+#define IRQ_EVENT_QUEUE_SIZE 64
+struct irq_event_queue {
+    struct irq_event events [IRQ_EVENT_QUEUE_SIZE];
+    volatile size_t read_cursor, write_cursor;
+    size_t read_cursor_local, write_cursor_local;
+    volatile bool overflow;
+};
+extern struct irq_event_queue irq_event_queue;
+static inline struct irq_event *irq_event_queue_write_alloc(void) {
+    if (irq_event_queue.write_cursor_local - irq_event_queue.read_cursor >= IRQ_EVENT_QUEUE_SIZE) {
+        irq_event_queue.overflow = true;
+        return NULL;
+    }
+    return &irq_event_queue.events[(irq_event_queue.write_cursor_local++) % IRQ_EVENT_QUEUE_SIZE];
+}
+static inline void irq_event_queue_write_commit(void) {
+    irq_event_queue.write_cursor = irq_event_queue.write_cursor_local;
+}
+static inline struct irq_event *irq_event_queue_read_alloc(void) {
+    if (irq_event_queue.write_cursor - irq_event_queue.read_cursor_local == 0) {
+        return NULL;
+    }
+    return &irq_event_queue.events[(irq_event_queue.read_cursor_local++) % IRQ_EVENT_QUEUE_SIZE];
+}
+static inline void irq_event_queue_read_commit(void) {
+    irq_event_queue.read_cursor = irq_event_queue.read_cursor_local;
+}
+
 #endif
 
 #endif

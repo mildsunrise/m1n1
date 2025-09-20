@@ -365,19 +365,42 @@ void exc_sync(u64 *regs)
     sysop("dsb sy");
 }
 
+struct irq_event_queue irq_event_queue;
+
 void exc_irq(u64 *regs)
 {
     u64 spsr = in_gl12() ? mrs(SYS_IMP_APL_SPSR_GL1) : mrs(SPSR_EL1);
     u32 reason = aic_ack();
 
     do {
-        printf("Exception: IRQ (from %s) die: %lu type: %lu num: %lu mpidr: %lx cnt: %lx\n",
-               get_exception_source(spsr), FIELD_GET(AIC_EVENT_DIE, reason),
-               FIELD_GET(AIC_EVENT_TYPE, reason), FIELD_GET(AIC_EVENT_NUM, reason), mrs(MPIDR_EL1),
-               mrs(CNTPCT_EL0));
+        u32 irq_type = FIELD_GET(AIC_EVENT_TYPE, reason);
+        u32 irq_num = FIELD_GET(AIC_EVENT_NUM, reason);
 
-        reason = aic_ack();
-    } while (reason);
+        if (irq_type == AIC_EVENT_TYPE_HW && (irq_num == 763 || irq_num == 765)) {
+            struct irq_event *event = irq_event_queue_write_alloc();
+            if (!event) continue;
+            event->time = mrs(CNTPCT_EL0);
+            event->num = irq_num;
+
+            u64 base = irq_num == 763 ? 0x2a1188000 : 0x2a1198000;
+            u32 *regs = event->spmi.regs;
+
+            for (u32 i = 0; i < 9; i++) regs[i] = read32(base + 0x60 + i*4);
+
+            for (u32 i = 0; i < 9; i++) write32(base + 0x60 + i*4, regs[i]);
+
+            irq_event_queue_write_commit();
+            aic_set_mask(irq_num, false);
+            sysop("isb");
+            sysop("dsb sy");
+            continue;
+        }
+
+        printf("Exception: IRQ (from %s) die: %lu type: %u num: %u mpidr: %lx cnt: %lx\n",
+               get_exception_source(spsr), FIELD_GET(AIC_EVENT_DIE, reason),
+               irq_type, irq_num, mrs(MPIDR_EL1),
+               mrs(CNTPCT_EL0));
+    } while ((reason = aic_ack()));
 
     UNUSED(regs);
     // print_regs(regs);

@@ -5,6 +5,7 @@
 #include "iodev.h"
 #include "memory.h"
 #include "string.h"
+#include "exception.h"
 
 #ifdef DEBUG_IODEV
 #define dprintf printf
@@ -246,8 +247,70 @@ void iodev_console_write(const void *buf, size_t length)
         spin_unlock(&console_lock);
 }
 
+static void printbits(u32 value, u32 offset)
+{
+    for (u32 i = 0; i < 32; i++) {
+        if ((value >> i) & 1)
+            printf("%u, ", offset + i);
+    }
+}
+
+static void printspmibits(u32 irq_num, u32 value, u32 offset)
+{
+    static const struct { u32 irq_num; u32 base; const char* name; } hpms[] = {
+        { 763, 10, "hpm0" },
+        { 763, 36, "hpm1" },
+        { 763, 88, "hpm5" },
+        { 765, 10, "hpm2" },
+    };
+    static const char* const hpm_intrs [] = { "INT", "SEL", "UNK2", "SLEEP", "WAKE" };
+    for (u32 i = 0; i < 32; i++) {
+        if (!((value >> i) & 1)) continue;
+        u32 bit = offset + i;
+        size_t m_id;
+        for (m_id = 0; m_id < sizeof(hpms) / sizeof(*hpms); m_id++) {
+            if (!( hpms[m_id].irq_num == irq_num && bit - hpms[m_id].base < 10 )) continue;
+            bit = bit - hpms[m_id].base;
+            printf("%s%s %s, ", hpms[m_id].name, (bit & 1) ? "" : "(alt)", hpm_intrs[bit >> 1]);
+            break;
+        }
+        if (!(m_id < sizeof(hpms) / sizeof(*hpms)))
+            printf("%u, ", bit);
+    }
+}
+
+u64 last_ctr = 0;
+
+void check_irq_events(void) {
+    while (true) {
+        if (irq_event_queue.overflow) {
+            irq_event_queue.overflow = false;
+            printf("OVERFLOW!\n");
+        }
+        struct irq_event *event = irq_event_queue_read_alloc();
+        if (!event) break;
+
+        u64 now = mrs(CNTPCT_EL0);
+        u64 diff = (event->time - last_ctr) / 1000000; // ms
+        u64 time_to_report = (now - event->time) / 1000000; // ms
+        if (time_to_report > 700)
+            printf("[WARN] took %lums to report:\n", time_to_report);
+
+        u32 *regs = event->spmi.regs;
+        printf("[%6lums] %s: ", diff, event->num == 763 ? "spmi-a0" : "spmi-a1");
+        if (regs[8]) (printf("IRQs "), printbits(regs[8], 0));
+        printf("events ");
+        for (u32 i = 0; i < 8; i++) printspmibits(event->num, regs[i], i*32);
+        printf("\n");
+
+        last_ctr = event->time;
+        irq_event_queue_read_commit();
+    }
+}
+
 void iodev_handle_events(iodev_id_t id)
 {
+    check_irq_events();
     bool do_lock = mmu_active();
 
     if (do_lock)
