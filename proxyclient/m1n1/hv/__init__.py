@@ -1630,6 +1630,7 @@ class HV(Reloadable):
                            "/arm-io/i2c0/hpmBusManager1/hpm%d",
                            "/arm-io/i2c3/hpmBusManager0/hpm%d",
                            "/arm-io/nub-spmi-a0/hpm%d",
+                           "/arm-io/nub-spmi-a1/hpm%d",
                            "/arm-io/atc%d-dpxbar",
                            "/arm-io/atc%d-dpphy",
                            "/arm-io/atc%d-dpin0",

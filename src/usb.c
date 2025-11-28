@@ -4,6 +4,7 @@
 #include "adt.h"
 #include "dart.h"
 #include "i2c.h"
+#include "spmi.h"
 #include "iodev.h"
 #include "malloc.h"
 #include "pmgr.h"
@@ -33,6 +34,7 @@ struct usb_drd_regs {
 #define FMT_DRD_PATH         "/arm-io/usb-drd%u"
 // HPM_PATH string is at most
 // "/arm-io/i2cX" (12) + "/" + hpmBusManagerX (14) + "/" + "hpmX" (4) + '\0'
+// "/arm-io/nub-spmi-aX" (19) + "/" + "hpmX" (4) + '\0'
 #define MAX_HPM_PATH_LEN 40
 
 static tps6598x_irq_state_t tps6598x_irq_state[USB_IODEV_COUNT];
@@ -231,14 +233,6 @@ struct iodev iodev_usb_vuart = {
     .lock = SPINLOCK_INIT,
 };
 
-void usb_spmi_init(void)
-{
-    for (int idx = 0; idx < USB_IODEV_COUNT; ++idx)
-        usb_phy_bringup(idx); /* Fails on missing devices, just continue */
-
-    usb_is_initialized = true;
-}
-
 typedef void(*hpm_callback_t)(tps6598x_dev_t *tps, u32 idx, void *data);
 
 static int hpm_index(const char *name)
@@ -297,6 +291,41 @@ static int hpm_for_each_in_i2c_bus(const char *i2c_path, hpm_callback_t cb, void
     return 0;
 }
 
+static int hpm_for_each_in_spmi_bus(const char *spmi_path, hpm_callback_t cb, void *data)
+{
+    char hpm_path[MAX_HPM_PATH_LEN];
+
+    int node = adt_path_offset(adt, spmi_path);
+    if (node < 0)
+        return 0;
+
+    spmi_dev_t *spmi = spmi_init(spmi_path);
+    if (!spmi) {
+        printf("usb: spmi init failed for %s\n", spmi_path);
+        return -1;
+    }
+
+    ADT_FOREACH_CHILD(adt, node)
+    {
+        const char *name = adt_get_name(adt, node);
+        int idx = hpm_index(name);
+        if (idx < 0) continue;
+        snprintf(hpm_path, sizeof(hpm_path), "%s/%s", spmi_path, name);
+
+        tps6598x_dev_t *tps = tps6598x_init_spmi(hpm_path, spmi);
+        if (!tps) {
+            printf("usb: tps6598x_init_spmi failed for %s.\n", hpm_path);
+            continue;
+        }
+        cb(tps, idx, data);
+        tps6598x_shutdown(tps);
+    }
+
+    spmi_shutdown(spmi);
+
+    return 0;
+}
+
 static void hpm_init_callback(tps6598x_dev_t *tps, u32 idx, void *)
 {
     if (tps6598x_powerup(tps) < 0) {
@@ -332,15 +361,6 @@ void usb_init(void)
         return;
 
     /*
-     * M3/M4 models do not use i2c, but instead SPMI with a new controller.
-     * We can get USB going for now by just bringing up the phys.
-     */
-    if (adt_path_offset(adt, "/arm-io/nub-spmi-a0/hpm0") > 0) {
-        usb_spmi_init();
-        return;
-    }
-
-    /*
      * A7-A11 uses a custom internal otg controller with the peripheral part
      * being dwc2.
      */
@@ -350,11 +370,21 @@ void usb_init(void)
         return;
     }
 
-    if (adt_is_compatible(adt, 0, "J180dAP"))
-        if (hpm_for_each_in_i2c_bus("/arm-io/i2c3", hpm_init_callback, NULL) < 0)
+    /*
+     * M3/M4 models do not use i2c, but instead SPMI with a new controller.
+     */
+    if (adt_path_offset(adt, "/arm-io/nub-spmi-a0/hpm0") > 0) {
+        if (hpm_for_each_in_spmi_bus("/arm-io/nub-spmi-a0", hpm_init_callback, NULL) < 0)
             return;
-    if (hpm_for_each_in_i2c_bus("/arm-io/i2c0", hpm_init_callback, NULL) < 0)
-        return;
+        if (hpm_for_each_in_spmi_bus("/arm-io/nub-spmi-a1", hpm_init_callback, NULL) < 0)
+            return;
+    } else {
+        if (adt_is_compatible(adt, 0, "J180dAP"))
+            if (hpm_for_each_in_i2c_bus("/arm-io/i2c3", hpm_init_callback, NULL) < 0)
+                return;
+        if (hpm_for_each_in_i2c_bus("/arm-io/i2c0", hpm_init_callback, NULL) < 0)
+            return;
+    }
 
     for (int idx = 0; idx < USB_IODEV_COUNT; ++idx)
         usb_phy_bringup(idx); /* Fails on missing devices, just continue */
@@ -365,21 +395,20 @@ void usb_init(void)
 void usb_hpm_restore_irqs(bool force)
 {
     /*
-     * Do not try to restore irqs on M3/M4 which don't use i2c
-     */
-    if (adt_path_offset(adt, "/arm-io/nub-spmi-a0/hpm0") > 0)
-        return;
-
-    /*
      * Do not try to restore irqs on A7-A11 which don't use i2c
      */
     if (adt_path_offset(adt, "/arm-io/otgphyctrl") > 0 &&
         adt_path_offset(adt, "/arm-io/usb-complex") > 0)
         return;
 
-    if (adt_is_compatible(adt, 0, "J180dAP"))
-        hpm_for_each_in_i2c_bus("/arm-io/i2c3", hpm_restore_irqs_callback, &force);
-    hpm_for_each_in_i2c_bus("/arm-io/i2c0", hpm_restore_irqs_callback, &force);
+    if (adt_path_offset(adt, "/arm-io/nub-spmi-a0/hpm0") > 0) {
+        hpm_for_each_in_spmi_bus("/arm-io/nub-spmi-a0", hpm_restore_irqs_callback, &force);
+        hpm_for_each_in_spmi_bus("/arm-io/nub-spmi-a1", hpm_restore_irqs_callback, &force);
+    } else {
+        if (adt_is_compatible(adt, 0, "J180dAP"))
+            hpm_for_each_in_i2c_bus("/arm-io/i2c3", hpm_restore_irqs_callback, &force);
+        hpm_for_each_in_i2c_bus("/arm-io/i2c0", hpm_restore_irqs_callback, &force);
+    }
 }
 
 void usb_iodev_init(void)
