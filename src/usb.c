@@ -262,7 +262,9 @@ void usb_spmi_init(void)
     usb_is_initialized = true;
 }
 
-static int usb_init_i2c(const char *i2c_path)
+typedef void(*hpm_callback_t)(tps6598x_dev_t *tps, u32 idx, void *data);
+
+static int hpm_for_each_in_i2c_bus(const char *i2c_path, hpm_callback_t cb, void *data)
 {
     char hpm_path[MAX_HPM_PATH_LEN];
 
@@ -303,16 +305,32 @@ static int usb_init_i2c(const char *i2c_path)
             printf("usb: failed to init %s\n", name);
             continue;
         }
-
-        if (tps6598x_disable_irqs(tps, &tps6598x_irq_state[idx]))
-            printf("usb: unable to disable IRQ masks for %s\n", name);
-
+        cb(tps, idx, data);
         tps6598x_shutdown(tps);
     }
 
     i2c_shutdown(i2c);
 
     return 0;
+}
+
+static void hpm_init_callback(tps6598x_dev_t *tps, u32 idx, void *)
+{
+    if (tps6598x_disable_irqs(tps, &tps6598x_irq_state[idx]))
+        printf("usb: unable to disable IRQ masks for hpm%d\n", idx);
+}
+
+static void hpm_restore_irqs_callback(tps6598x_dev_t *tps, u32 idx, void *data)
+{
+    bool force = *((bool *)data);
+
+    if (iodev_get_usage(IODEV_USB0 + idx) && !force)
+        return;
+
+    if (tps6598x_irq_state[idx].valid) {
+        if (tps6598x_restore_irqs(tps, &tps6598x_irq_state[idx]))
+            printf("usb: unable to restore IRQ masks for hpm%d\n", idx);
+    }
 }
 
 void usb_init(void)
@@ -339,68 +357,16 @@ void usb_init(void)
         return;
     }
 
-    if (adt_is_compatible(adt, 0, "J180dAP") && usb_init_i2c("/arm-io/i2c3") < 0)
-        return;
-    if (usb_init_i2c("/arm-io/i2c0") < 0)
+    if (adt_is_compatible(adt, 0, "J180dAP"))
+        if (hpm_for_each_in_i2c_bus("/arm-io/i2c3", hpm_init_callback, NULL) < 0)
+            return;
+    if (hpm_for_each_in_i2c_bus("/arm-io/i2c0", hpm_init_callback, NULL) < 0)
         return;
 
     for (int idx = 0; idx < USB_IODEV_COUNT; ++idx)
         usb_phy_bringup(idx); /* Fails on missing devices, just continue */
 
     usb_is_initialized = true;
-}
-
-void usb_i2c_restore_irqs(const char *i2c_path, bool force)
-{
-    char hpm_path[MAX_HPM_PATH_LEN];
-
-    int node = adt_path_offset(adt, i2c_path);
-    if (node < 0)
-        return;
-
-    node = adt_first_child_offset(adt, node);
-    if (node < 0)
-        return;
-
-    if (!adt_is_compatible(adt, node, "usbc,manager"))
-        return;
-
-    const char *hpm_mngr_name = adt_get_name(adt, node);
-    if (!hpm_mngr_name || strnlen(hpm_mngr_name, 16) >= 16)
-        return;
-
-    i2c_dev_t *i2c = i2c_init(i2c_path);
-    if (!i2c) {
-        printf("usb: i2c init failed.\n");
-        return;
-    }
-
-    ADT_FOREACH_CHILD(adt, node)
-    {
-        const char *name = adt_get_name(adt, node);
-        if (!name || memcmp(name, "hpm", 3) || name[4] != '\0')
-            continue; // unexpected hpm node name
-        u32 idx = name[3] - '0';
-        if (idx >= USB_IODEV_COUNT)
-            continue; // unexpected hpm index
-
-        if (iodev_get_usage(IODEV_USB0 + idx) && !force)
-            continue;
-
-        if (tps6598x_irq_state[idx].valid) {
-            snprintf(hpm_path, sizeof(hpm_path), "%s/%s/%s", i2c_path, hpm_mngr_name, name);
-            tps6598x_dev_t *tps = hpm_init(i2c, hpm_path);
-            if (!tps)
-                continue;
-
-            if (tps6598x_restore_irqs(tps, &tps6598x_irq_state[idx]))
-                printf("usb: unable to restore IRQ masks for %s\n", name);
-
-            tps6598x_shutdown(tps);
-        }
-    }
-
-    i2c_shutdown(i2c);
 }
 
 void usb_hpm_restore_irqs(bool force)
@@ -419,8 +385,8 @@ void usb_hpm_restore_irqs(bool force)
         return;
 
     if (adt_is_compatible(adt, 0, "J180dAP"))
-        usb_i2c_restore_irqs("/arm-io/i2c3", force);
-    usb_i2c_restore_irqs("/arm-io/i2c0", force);
+        hpm_for_each_in_i2c_bus("/arm-io/i2c3", hpm_restore_irqs_callback, &force);
+    hpm_for_each_in_i2c_bus("/arm-io/i2c0", hpm_restore_irqs_callback, &force);
 }
 
 void usb_iodev_init(void)
