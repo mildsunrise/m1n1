@@ -231,23 +231,6 @@ struct iodev iodev_usb_vuart = {
     .lock = SPINLOCK_INIT,
 };
 
-static tps6598x_dev_t *hpm_init(i2c_dev_t *i2c, const char *hpm_path)
-{
-    tps6598x_dev_t *tps = tps6598x_init(hpm_path, i2c);
-    if (!tps) {
-        printf("usb: tps6598x_init failed for %s.\n", hpm_path);
-        return NULL;
-    }
-
-    if (tps6598x_powerup(tps) < 0) {
-        printf("usb: tps6598x_powerup failed for %s.\n", hpm_path);
-        tps6598x_shutdown(tps);
-        return NULL;
-    }
-
-    return tps;
-}
-
 void usb_spmi_init(void)
 {
     for (int idx = 0; idx < USB_IODEV_COUNT; ++idx)
@@ -257,6 +240,16 @@ void usb_spmi_init(void)
 }
 
 typedef void(*hpm_callback_t)(tps6598x_dev_t *tps, u32 idx, void *data);
+
+static int hpm_index(const char *name)
+{
+    if (!name || memcmp(name, "hpm", 3) || name[4] != '\0')
+        return -1; // unexpected hpm node name
+    u32 idx = name[3] - '0';
+    if (idx >= USB_IODEV_COUNT)
+        return -1; // unexpected hpm index
+    return idx;
+}
 
 static int hpm_for_each_in_i2c_bus(const char *i2c_path, hpm_callback_t cb, void *data)
 {
@@ -286,17 +279,13 @@ static int hpm_for_each_in_i2c_bus(const char *i2c_path, hpm_callback_t cb, void
     ADT_FOREACH_CHILD(adt, node)
     {
         const char *name = adt_get_name(adt, node);
-        if (!name || memcmp(name, "hpm", 3) || name[4] != '\0')
-            continue; // unexpected hpm node name
-        u32 idx = name[3] - '0';
-        if (idx >= USB_IODEV_COUNT)
-            continue; // unexpected hpm index
-
+        int idx = hpm_index(name);
+        if (idx < 0) continue;
         snprintf(hpm_path, sizeof(hpm_path), "%s/%s/%s", i2c_path, hpm_mngr_name, name);
 
-        tps6598x_dev_t *tps = hpm_init(i2c, hpm_path);
+        tps6598x_dev_t *tps = tps6598x_init(hpm_path, i2c);
         if (!tps) {
-            printf("usb: failed to init %s\n", name);
+            printf("usb: tps6598x_init failed for %s.\n", hpm_path);
             continue;
         }
         cb(tps, idx, data);
@@ -310,6 +299,11 @@ static int hpm_for_each_in_i2c_bus(const char *i2c_path, hpm_callback_t cb, void
 
 static void hpm_init_callback(tps6598x_dev_t *tps, u32 idx, void *)
 {
+    if (tps6598x_powerup(tps) < 0) {
+        printf("usb: tps6598x_powerup failed for hpm%d.\n", idx);
+        return;
+    }
+
     if (tps6598x_disable_irqs(tps, &tps6598x_irq_state[idx]))
         printf("usb: unable to disable IRQ masks for hpm%d\n", idx);
 }
@@ -317,6 +311,11 @@ static void hpm_init_callback(tps6598x_dev_t *tps, u32 idx, void *)
 static void hpm_restore_irqs_callback(tps6598x_dev_t *tps, u32 idx, void *data)
 {
     bool force = *((bool *)data);
+
+    if (tps6598x_powerup(tps) < 0) {
+        printf("usb: tps6598x_powerup failed for hpm%d.\n", idx);
+        return;
+    }
 
     if (iodev_get_usage(IODEV_USB0 + idx) && !force)
         return;
