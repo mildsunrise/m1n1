@@ -408,6 +408,8 @@ int tps6598x_enable_debugusb(void)
     if (node < 0)
         return -1;
 
+    // TODO: spmi support
+
     ADT_FOREACH_CHILD(adt, node)
     {
         int mngr_node;
